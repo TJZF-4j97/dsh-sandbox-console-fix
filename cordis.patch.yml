@@ -1,0 +1,33 @@
+# Bundle patch for the shipped `sandbox` row (ctx.sandbox, @deepseek-ai/dsh-sandbox-local).
+#
+# Loader dialect (see the `cordis-composition-reference` skill):
+#   * a non-insert patch with an `id` targets that existing row, and a truthy
+#     `name` ASSERTS the existing plugin name rather than renaming it — so a
+#     provider row cannot be swapped by overriding its id;
+#   * `insert` appends new rows;
+#   * `disabled` accepts a boolean, null, or a `!!js` expression evaluated against
+#     the Loader context at every mount decision (the shipped `dsh-base` patch uses
+#     `disabled: !!js process.platform === 'win32'` for its own `bash-sandbox` row).
+#
+# Because the failure is Windows-only, both rows are platform-guarded: off Windows
+# the shipped provider stays enabled and this bundle's row stays disabled, so the
+# package is inert there.
+#
+# On Windows: disable the shipped row, then mount this bundle's provider, which
+# provides the same service slot (ctx.sandbox). The composition keeps exactly one
+# provider, and the shipped package still resolves from the dsh installation.
+#
+# What the mounted provider changes: the Windows ACL runner argv becomes
+#   [execPath, --import <console-shim>, runner.js, ...profile, --, target]
+# instead of
+#   [execPath, runner.js, ...profile, --, target]
+# Everything else — restricted token, write-restricted SIDs, Low integrity label,
+# ACL grants/denies, fs policy, denial dialects — is inherited unchanged.
+
+- id: sandbox
+  disabled: !!js process.platform === 'win32'
+
+- insert:
+    - id: sandbox-console-fix
+      name: dsh-sandbox-console-fix
+      disabled: !!js process.platform !== 'win32'

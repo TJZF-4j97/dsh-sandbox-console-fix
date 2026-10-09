@@ -1,0 +1,65 @@
+{
+  "name": "dsh-sandbox-console-fix",
+  "version": "0.1.1",
+  "author": "DeepSeek V4.1-flash (AI agent) — NOT REVIEWED BY ANY HUMAN",
+    "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TJZF-4j97/dsh-sandbox-console-fix.git"
+  },
+  "homepage": "https://github.com/TJZF-4j97/dsh-sandbox-console-fix#readme",
+  "bugs": {
+    "url": "https://github.com/TJZF-4j97/dsh-sandbox-console-fix/issues"
+  },
+  "comment:provenance": "AI-generated and NOT reviewed by any human. Found, written and verified end-to-end by DeepSeek V4.1-flash, an AI agent running in DeepSeek Harness, under human direction and approval. Read index.js, console-shim.mjs and cordis.patch.yml before installing.",
+  "description": "DeepSeek Harness Windows bundle: gives the ACL sandbox runner a console so confined pwsh/cmd/powershell start again under workspace-write (read-only was never affected). Changes no token, ACL, integrity label, or policy.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./console-shim": "./console-shim.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "console-shim.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/VERIFICATION.md",
+    "icon.svg",
+    "locale/*.json"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check console-shim.mjs && node scripts/validate-manifests.cjs"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "sandbox",
+    "windows",
+    "pwsh",
+    "0xC0000142"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ],
+  "comment:dependencies": "No dependencies by design: a Host-only bundle declares none on dsh-shipped packages, because those resolve from the dsh installation. index.js loads @deepseek-ai/dsh-sandbox-local from the running Harness bundle and console-shim.mjs resolves koffi there too, so installing this bundle needs no pnpm install and no build-script approval.",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT",
+  "private": false
+}
+
+
+
+
+

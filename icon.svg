@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Terminal window with a prompt">
+  <rect x="2.5" y="4.5" width="27" height="23" rx="3.5" fill="none" stroke="#4b5563" stroke-width="2"/>
+  <path d="M2.5 10.5h27" stroke="#4b5563" stroke-width="2"/>
+  <circle cx="7" cy="7.5" r="1.1" fill="#4b5563"/>
+  <circle cx="10.8" cy="7.5" r="1.1" fill="#4b5563"/>
+  <path d="M8 15.5l3.6 3-3.6 3" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14.5 21.5h6.5" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round"/>
+</svg>
