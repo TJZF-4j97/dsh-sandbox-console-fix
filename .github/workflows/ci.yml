@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check console-shim.mjs
+          node --check scripts/console-probe.cjs
+          node --check scripts/full-chain-repro.js
+          node --check scripts/validate-manifests.cjs
+          node --check scripts/extract-asar.cjs
+
+      - name: Structural check
+        run: node scripts/validate-manifests.cjs
+
+      # The behavioural checks need the packaged Harness (an app.asar plus the
+      # Electron binary) and a real restricted token, so they deliberately do not
+      # run here; see scripts/README.md for the manual procedure.
