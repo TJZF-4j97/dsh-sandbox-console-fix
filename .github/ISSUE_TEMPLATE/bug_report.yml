@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in dsh-sandbox-console-fix does not work on Windows
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. This bundle is a bridge for one specific Windows bug —
+        please confirm first that the failure is *not* the upstream symptom
+        (`[exit code: 3221225794]` = `0xC0000142`) without the bundle installed.
+
+  - type: input
+    id: harness
+    attributes:
+      label: DeepSeek Harness version
+      placeholder: "0.2.0-rc.2"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version / build
+      placeholder: "Windows 11 22H2, 22621, x64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Sandbox mode
+      options:
+        - workspace-write
+        - read-only
+        - danger-full-access
+    validations:
+      required: true
+
+  - type: textarea
+    id: shell
+    attributes:
+      label: Shell and PowerShell build
+      description: Output of `$PSVersionTable.PSVersion` and whether it is the MSI or Store build.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the exit code and any stderr.
+    validations:
+      required: true
+
+  - type: textarea
+    id: checks
+    attributes:
+      label: Output of `npm run check`
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction output
+      description: |
+        If you can, run the chain reproduction and paste the JSON:
+        `node scripts/full-chain-repro.js … -- pwsh -NoLogo -NoProfile -Command "exit 7"`
+      render: json
+    validations:
+      required: false

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "沙箱控制台修复（Windows）",
+    "description": "⚠️ 未经任何人工审查——由 AI（DeepSeek V4.1-flash）生成。为 Windows ACL 沙箱 runner 分配控制台，使受限 pwsh/cmd/powershell 能在 workspace-write 下启动；安装前请自行阅读代码。"
+  }
+}

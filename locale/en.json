@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sandbox console fix (Windows)",
+    "description": "NOT REVIEWED BY ANY HUMAN — AI-generated (DeepSeek V4.1-flash). Gives the Windows ACL sandbox runner a console so confined pwsh/cmd/powershell start again under workspace-write; read the code before installing."
+  }
+}
