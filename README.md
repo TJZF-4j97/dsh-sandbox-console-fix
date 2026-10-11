@@ -95,7 +95,7 @@ shipped:  [execPath, runner.js, …profile, --, target]
 this:     [execPath, --import <console-shim.mjs>, runner.js, …profile, --, target]
 ```
 
-`console-shim.mjs` calls `AllocConsole()` when the process has no console, and nothing else, so the
+`console-shim.mjs` merges one `Everyone` full-access ACE into the runner process token's Default DACL (falling back to `AllocConsole()` only when that cannot be applied), so the
 confined child inherits a console and starts normally.
 
 ### What does **not** change
@@ -222,13 +222,39 @@ the runner keeps its shipped behaviour.
 ## License
 
 [MIT](LICENSE)
+## Security review (three adversarial rounds, 2026-10-11)
 
+This is an **AI self-review, not a human audit**. Three attack/fix/functional-test rounds were run
+against the installed bundle; every finding below was reproduced before it was fixed, and every fix was
+re-tested against the same attack.
 
+| Finding | Severity | Status |
+| --- | --- | --- |
+| A bare `require('koffi')` resolved from this plugin's ancestor directories — all writable by any local process — so a planted package executed inside the sandbox runner (**outside** the sandbox). Reproduced. | High | Fixed: koffi is now resolved only from inside the running Harness installation. |
+| `index.js` loaded `@deepseek-ai/dsh-sandbox-local` through the same walk-up chain, unvalidated; a planted class runs inside the Harness process and controls `windowsAclRunnerInvocation()`. Reproduced. | High | Fixed: the resolution's realpath must be inside this plugin's own `node_modules` or the dsh profile root. |
+| The diagnostic env var wrote an arbitrary absolute path, truncating any existing file. Reproduced. | Medium | Fixed: the diagnostic now emits one stderr line and performs no file writes. |
+| A missing or unreadable shim was preloaded unconditionally, so the runner failed to start and **every** sandboxed command failed. Reproduced. | Medium | Fixed: the shim's existence is checked before it is preloaded. |
+| The merge's re-read only compared the ACE count, so a silent `SetTokenInformation` no-op would be reported as success. | Medium | Fixed: the Default DACL is now walked and the ACE must name `Everyone` **and** carry `FILE_ALL_ACCESS`. |
+| Token handle, SID and merged ACL were never released. | Low | Fixed: `CloseHandle` + `LocalFree`. |
+| The `EXPLICIT_ACCESS_W` layout is 64-bit; other architectures were not excluded. | Low | Fixed: the merge is skipped off x64 and the console fallback is used. |
+| The fallback's standard-handle restore had no per-step protection. | Low | Fixed: each step is individually guarded. |
+| An inherited `Authenticated Users: Modify` ACE (from the volume hosting the plugin directory) applies to this plugin's source directory, and the profile installs it with `link:`, so **any authenticated local user can rewrite the executed code — including `cordis.patch.yml`, whose `!!js` expressions the Loader evaluates as code.** Verified by `icacls` and by reading the Loader. | High (deployment) | **Not fixable in code.** Either tighten that directory's ACL or accept and disclose the trust premise. |
+| A later patch layer (profile, `~/.dsh/cordis.patch.yml`, `--patch`) can revive the shipped `sandbox` row or supply config for this bundle's inserted row. | Medium | Documented; inherent to the layering design. |
+| Removing or moving the source directory while a session is live makes the layer silently skip, which revives the shipped row and brings `0xC0000142` back. | Medium | Documented. |
+| `link:` dependencies carry no integrity in `pnpm-lock.yaml`, so runtime tamper detection is impossible. The executed tree was nevertheless verified to equal the published `v0.2.0` commit by git object hashes. | Low | Documented. |
 
+### What this bundle changes, precisely
 
-
-
-
-
+* It merges one `Everyone` full-access ACE into the **runner process token's Default DACL**, before the
+  runner derives the restricted token — the same ACE the shipped runner already merges on its
+  `read-only` path. The restricted token therefore inherits it.
+* Scope: a Default DACL governs the initial ACL of **every securable object** that token holder creates
+  without an explicit security descriptor, so this is process-wide for the runner, not limited to the
+  confined child. It is per-process and disappears when the Harness exits.
+* Measured after the fix: the confined child starts, its own restricted token's Default DACL contains
+  the `Everyone` ACE with mask `0x1f01ff`, writes outside the workspace stay denied and absent, and the
+  child's own console is created hidden.
+* **Uninstall this bundle before validating a Harness upgrade** — while it is installed, its `disabled`
+  patch silently discards any upstream change to the shipped `sandbox` row.
 
 

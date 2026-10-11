@@ -248,3 +248,57 @@ The v2 mechanism was verified on the same host before it replaced the console re
 So the Default-DACL change does not widen the write boundary, and the child's own console — the object
 whose creation the missing `Everyone` ACE used to fail — is created hidden by the runner's
 `STARTF_USESHOWWINDOW | SW_HIDE` spawn.
+
+## 12. Adversarial review — three attack / fix / functional-test rounds (2026-10-11)
+
+**AI self-review, not a human audit.** Three independent read-only reviewers audited the shim/provider,
+the declaration and install layer, and the documentation against the code. Every finding below was
+reproduced on this machine before it was fixed, and every fix was re-attacked with the same technique.
+
+### Round 1 — environment and failure paths
+
+| Attack | Result before | Result after |
+| --- | --- | --- |
+| Plant a `koffi` package in an ancestor directory of the plugin (`<plugin-ancestor>\node_modules\koffi`) | **executed inside the sandbox runner** (marker file written) | blocked: koffi resolves only from `resources/app.asar/dsh/node_modules/koffi` |
+| Point `DSH_SANDBOX_CONSOLE_FIX_DEBUG` at `C:\Windows\Temp\…` and at `%USERPROFILE%\…` | **arbitrary-path write**, truncating any existing file | blocked: the diagnostic writes no files (one stderr line) |
+| Make the merge a silent no-op and rely on the old `after >= before` check | accepted as success | rejected: the Default DACL is walked; the ACE must name `Everyone` with `FILE_ALL_ACCESS` |
+
+The resolution base was measured, not assumed: `require.resolve.paths('koffi')` from the shim's own URL
+lists the plugin directory, both parent directories, `<drive-root>\node_modules` and the Harness `lib\node` — the
+bare specifier never resolves in a normal install, so that branch was pure attack surface.
+
+### Round 2 — declaration and install layer
+
+| Attack | Result |
+| --- | --- |
+| Rewrite the plugin's executed code / its `cordis.patch.yml` | **possible for any authenticated local user**: the directory and all four code files carry an inherited `NT AUTHORITY\Authenticated Users:(M)` ACE from the volume that hosts it. The Loader evaluates `!!js` expressions with `new Function('ctx','expr','with (ctx){ return eval(expr) }')` (`cordis-plugin-loader` index.js:233, `utils.ts:5`), so a writer of the patch file executes code. **Not fixable in code.** |
+| Plant `@deepseek-ai/dsh-sandbox-local` in an ancestor directory (the base class controls the runner argv) | **executed in the Harness process** before the fix; blocked after (realpath must be inside the plugin's own `node_modules` or the dsh profile root) |
+| Delete the shim so the unconditionally injected `--import` fails | runner fails at startup (`ERR_MODULE_NOT_FOUND`, child never runs) — reproduced; after the fix the shim's existence is checked and the base argv is used instead |
+| Revive the shipped `sandbox` row from a later layer, or supply config for the inserted row | possible by design (layers compose in order); documented, not fixable in this bundle |
+
+### Round 3 — attacking the fixes and the end-to-end claim
+
+| Attack / check | Result |
+| --- | --- |
+| Re-run both hijacks and the arbitrary-write attack against the **installed** files | all blocked |
+| Independent verification of the actual effect: the confined child reads **its own restricted token's** Default DACL | `{"aceCount":5,"everyoneAce":true,"mask":"0x1f01ff","fullAccess":true}` with the fix; without the fix the child never starts (`3221225794`) |
+| Functional matrix | GUI+`workspace-write` → 0; GUI+`read-only` → 0; `node` host+`workspace-write` → 0; GUI+`workspace-write` without the bundle → `3221225794` |
+| Confinement after the fix | four out-of-workspace targets denied **and absent**; in-workspace write succeeds |
+| Window | the child's own console is created and never visible across 1.6 s |
+| Cross-process blast radius | modifying the runner's token does **not** change the parent's: `PARENT-BEFORE {aceCount:3} / CHILD {aceCount:4} / PARENT-AFTER {aceCount:3}` |
+
+### Residual risk (unresolved)
+
+1. **The trust premise of a `link:` install**: the executed code lives in a directory that inherits
+   `Authenticated Users: Modify` from the volume that hosts it. Tightening that directory's ACL, or installing a copy into
+   the profile, is required to remove it. Not changed here.
+2. **No upstream version guard**: if the Harness renames or re-shapes the shipped `sandbox` row or the
+   provider export while this bundle is installed, Windows can end up with no `ctx.sandbox` provider,
+   or with two. A `peerDependencies` guard would mitigate it, but the project forbids dependencies on
+   dsh-shipped packages.
+3. **Not verified**: 32-bit hosts (the merge is skipped by design), the desktop UI's visibility of
+   skipped bundles, the precise runtime consequence of two providers, and whether a `link:` dependency
+   can carry integrity. The `run` was measured on one machine only.
+4. One Electron load attempt failed once with `Cannot read properties of undefined (reading 'reflect')`
+   and did not reproduce in two subsequent identical runs; recorded here rather than discarded.
+

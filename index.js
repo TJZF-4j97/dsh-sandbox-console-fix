@@ -1,7 +1,34 @@
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const require_ = createRequire(import.meta.url);
+const pluginDir = fileURLToPath(new URL('.', import.meta.url));
+
+/**
+ * Is a resolved module path inside a directory this bundle is willing to load code from?
+ *
+ * A bare `require('@deepseek-ai/dsh-sandbox-local')` walks this plugin's ancestor directories,
+ * every one of which is writable by any process running as this user. A planted copy would
+ * execute inside the Harness process, and the class it returns controls
+ * `windowsAclRunnerInvocation()` — it could hand back an argv with no runner at all, which is
+ * the sandbox switched off. Only this plugin's own node_modules, or the dsh profile root, is
+ * trusted to supply that package.
+ */
+function isTrustedLocalInstall(resolvedPath) {
+  let real;
+  try {
+    real = realpathSync(resolvedPath);
+  } catch {
+    return false;
+  }
+  const normalized = real.replace(/\\/g, '/').toLowerCase();
+  const ownModules = (pluginDir + 'node_modules/').replace(/\\/g, '/').toLowerCase();
+  if (normalized.startsWith(ownModules)) return true;
+  const profileRoot = (homedir() + '/.dsh/profiles/').replace(/\\/g, '/').toLowerCase();
+  return normalized.startsWith(profileRoot) && normalized.includes('/node_modules/');
+}
 
 /** The console shim, resolved next to this file so the URL survives packaging. */
 const shimUrl = new URL('./console-shim.mjs', import.meta.url).href;
@@ -40,10 +67,11 @@ function loadLocalSandboxProvider() {
     }
   }
   try {
-    return {
-      module: require_('@deepseek-ai/dsh-sandbox-local'),
-      from: 'node_modules/@deepseek-ai/dsh-sandbox-local',
-    };
+    const resolved = require_.resolve('@deepseek-ai/dsh-sandbox-local');
+    if (!isTrustedLocalInstall(resolved)) {
+      throw new Error('refusing to load it from ' + resolved);
+    }
+    return { module: require_(resolved), from: resolved };
   } catch (error) {
     attempted.push(
       `node_modules/@deepseek-ai/dsh-sandbox-local (${error instanceof Error ? error.message : String(error)})`,
@@ -79,8 +107,8 @@ if (typeof LocalSandboxProvider !== 'function') {
  * (0xC0000142).
  *
  * The fix keeps every confinement decision exactly as shipped and only inserts
- * `--import <console-shim>` before the runner entry, so the runner process calls
- * AllocConsole() once at startup. The confined child then starts normally.
+ * `--import <console-shim>` before the runner entry, so the shim runs in the runner process: it first merges an `Everyone` ACE into the runner token
+ * Default DACL, and only falls back to AllocConsole() when it cannot. The child then starts.
  * Which step this actually repairs is not isolated — see docs/VERIFICATION.md sections 5 and 9.
  *
  * What this does NOT change
@@ -100,9 +128,16 @@ export class ConsoleFixSandboxProvider extends LocalSandboxProvider {
   windowsAclRunnerInvocation() {
     const base = super.windowsAclRunnerInvocation();
     if (!Array.isArray(base) || base.length === 0) return base;
+    if (!existsSync(fileURLToPath(shimUrl))) {
+      // A preload the runner cannot read makes the runner fail to start, which breaks EVERY
+      // sandboxed command. Losing the fix is bad; breaking the shell is worse.
+      console.warn('dsh-sandbox-console-fix: console-shim.mjs is missing; running without the fix');
+      return base;
+    }
     return [base[0], '--import', shimUrl, ...base.slice(1)];
   }
 }
 
 export default ConsoleFixSandboxProvider;
+
 

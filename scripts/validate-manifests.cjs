@@ -185,12 +185,62 @@ if (typeof manifest.author === 'string' && manifest.author.includes('V4.1-flash'
   }
 }
 
+// --- Hardening added after the 2026-10-11 adversarial review -------------------------------
+// The checks above never looked at the INSERTED row's guard, never checked the POLARITY of the
+// shipped row's guard, and only grepped for keywords in the shim. All three were real blind
+// spots; these assertions close them and pin the security fixes in place.
+{
+  const patch = readFileSync(join(root, manifest.dsh.bundle.patch), 'utf8');
+  const guardOf = (rowLine) => {
+    const lines = patch.split(/\r?\n/);
+    const start = lines.findIndex((line) => new RegExp('^\\s*-\\s*' + rowLine + '\\s*$').test(line));
+    if (start < 0) return undefined;
+    for (let i = start + 1; i < lines.length && !/^\s*-\s/.test(lines[i]); i += 1) {
+      const m = /^\s*disabled:\s*(.+?)\s*$/.exec(lines[i]);
+      if (m) return m[1];
+    }
+    return undefined;
+  };
+  const shippedGuard = guardOf('id:\\s*sandbox') ?? guardOf('id: sandbox');
+  if (shippedGuard === undefined) fail('shipped `sandbox` row has no `disabled:` guard');
+  else if (/^["']/.test(shippedGuard)) fail('shipped row guard is a quoted string literal: Boolean(non-empty string) is true, so it disables on every platform');
+  else if (!/process\.platform\s*===\s*'win32'/.test(shippedGuard)) fail('shipped row guard is not the exact win32 polarity: ' + shippedGuard);
+  else ok('shipped row guard is the exact win32 polarity');
+
+  const insertedGuard = guardOf('id:\\s*sandbox-console-fix') ?? guardOf('id: sandbox-console-fix');
+  if (insertedGuard === undefined) fail('inserted row has no `disabled:` guard (it would then be active on every platform)');
+  else if (/^["']/.test(insertedGuard)) fail('inserted row guard is a quoted string literal: Boolean(non-empty string) is true, so it disables on every platform');
+  else if (!/process\.platform\s*!==\s*'win32'/.test(insertedGuard)) fail('inserted row guard is not the exact non-win32 polarity: ' + insertedGuard);
+  else ok('inserted row guard is the exact non-win32 polarity');
+}
+{
+  // Module-resolution hijack guard: a bare `require('koffi')` walks writable ancestor directories
+  // and would execute planted code inside the sandbox runner.
+  if (/require_\(\s*'koffi'\s*\)/.test(shim)) fail("console-shim.mjs resolves koffi through a bare specifier (module-resolution hijack)");
+  else ok('console-shim.mjs never resolves koffi through a bare specifier');
+  if (shim.includes('writeFileSync')) fail('console-shim.mjs writes files (the diagnostic must not create arbitrary-path writes)');
+  else ok('console-shim.mjs performs no file writes');
+  if (shim.includes("process.arch !== 'x64'")) ok('console-shim.mjs refuses the 64-bit-only merge on other architectures');
+  else fail('console-shim.mjs does not guard the 64-bit-only EXPLICIT_ACCESS_W layout');
+  if (shim.includes('FILE_ALL_ACCESS')) ok('console-shim.mjs verifies the granted access mask');
+  else fail('console-shim.mjs does not verify the granted access mask');
+  if (shim.includes('CloseHandle') && shim.includes('LocalFree')) ok('console-shim.mjs releases the token handle, the SID and the merged ACL');
+  else fail('console-shim.mjs leaks the token handle, the SID or the merged ACL');
+}
+{
+  if (provider.includes('isTrustedLocalInstall')) ok('index.js validates where the base class is loaded from');
+  else fail('index.js loads the base class from an unvalidated resolution');
+  if (provider.includes('console-shim.mjs is missing')) ok('index.js refuses to preload a missing shim (a broken preload would break every command)');
+  else fail('index.js injects the preload without checking that the shim exists');
+}
 console.log('');
 if (failures.length > 0) {
   console.error(`${failures.length} check(s) failed`);
   process.exit(1);
 }
 console.log('all structural checks passed');
+
+
 
 
 
