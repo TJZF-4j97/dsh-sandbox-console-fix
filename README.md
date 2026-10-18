@@ -1,5 +1,25 @@
 # dsh-sandbox-console-fix
 
+> ## Update (2026-10-19): this bundle is **not** needed on a non-elevated Harness — repository archived
+>
+> The failure this bundle works around is gated by the **elevation of the process that launches the
+> sandbox runner**, not by the Default DACL alone. Measured on the reporting machine with the
+> byte-identical shipped runner:
+>
+> | how the runner was launched | token's Default DACL | `workspace-write` result |
+> | --- | --- | --- |
+> | elevated (UAC disabled) | `{Administrators, SYSTEM, <logon SID>}` | `3221225794` (`0xC0000142`) |
+> | non-elevated (UAC enabled) | `{<user>, SYSTEM, <logon SID>}` | **works** — three repeats |
+>
+> Neither token's Default DACL contains `Everyone`. On a **non-elevated** Harness the shipped runner
+> already starts confined `workspace-write` children, so this bundle is unnecessary there; it has been
+> uninstalled from the reporting machine. It remains a workaround for **elevated** hosts (UAC disabled,
+> or the Harness launched as administrator), where the failure is still real.
+>
+> The structural fix belongs upstream: one line in `setTokenDefaultDaclGrant` (see Harness discussions
+> #9038 / #8775). Upstream #9280 and #9282 were closed as *outdated* with this correction.
+> This repository is **archived** and kept for the record only. *(AI-generated, not human-reviewed.)*
+
 > **Windows only.** A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) bundle that
 > makes the confined sandbox usable on the desktop app: `workspace-write` shell calls start again, and
 > `read-only` keeps working — **without relaxing any confinement**. Both of this bundle's patch rows are
